@@ -35,6 +35,7 @@ struct SearchRequest
     vector<char> imageData;
     ClientConnection *client;
     vector<u_int32_t> results;
+    vector<float> scores;
 };
 
 

@@ -185,17 +185,15 @@ u_int32_t ORBSearcher::searchImage(SearchRequest &request)
 void ORBSearcher::returnResults(priority_queue<SearchResult> &rankedResults,
                                   SearchRequest &req, unsigned i_maxNbResults)
 {
-    list<u_int32_t> imageIds;
-
     unsigned i_res = 0;
     while(!rankedResults.empty()
           && i_res < i_maxNbResults)
     {
         const SearchResult &res = rankedResults.top();
-        imageIds.push_back(res.i_imageId);
         i_res++;
         cout << "Id: " << res.i_imageId << ", score: " << res.f_weight << endl;
         req.results.push_back(res.i_imageId);
+        req.scores.push_back(res.f_weight);
         rankedResults.pop();
     }
 }
