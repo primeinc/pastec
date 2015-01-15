@@ -26,6 +26,7 @@
 #include <set>
 #include <tr1/unordered_set>
 #include <tr1/unordered_map>
+#include <queue>
 
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -43,6 +44,56 @@ ORBSearcher::ORBSearcher(ORBIndex *index, ORBWordIndex *wordIndex)
 
 ORBSearcher::~ORBSearcher()
 { }
+
+
+/**
+ * @brief The RankingThread class
+ * This threads computes the tf-idf weights of the images that contains the words
+ * given in argument.
+ */
+class RankingThread : public Thread
+{
+public:
+    RankingThread(ORBIndex *index, const unsigned i_nbTotalIndexedImages,
+                  unordered_map<u_int32_t, vector<Hit> > &indexHits)
+        : index(index), i_nbTotalIndexedImages(i_nbTotalIndexedImages),
+          indexHits(indexHits) { }
+
+    void addWord(u_int32_t i_wordId)
+    {
+        wordIds.push_back(i_wordId);
+    }
+
+    void *run()
+    {
+        weights.rehash(wordIds.size());
+
+        for (deque<u_int32_t>::const_iterator it = wordIds.begin();
+            it != wordIds.end(); ++it)
+        {
+            const vector<Hit> &hits = indexHits[*it];
+
+            const float f_weight = log((float)i_nbTotalIndexedImages / hits.size());
+
+            for (vector<Hit>::const_iterator it2 = hits.begin();
+                 it2 != hits.end(); ++it2)
+            {
+                /* TF-IDF according to the paper "Video Google:
+                 * A Text Retrieval Approach to Object Matching in Videos" */
+                unsigned i_totalNbWords = index->countTotalNbWord(it2->i_imageId);
+                weights[it2->i_imageId] += f_weight / i_totalNbWords;
+            }
+        }
+
+        return NULL;
+    }
+
+    ORBIndex *index;
+    const unsigned i_nbTotalIndexedImages;
+    unordered_map<u_int32_t, vector<Hit> > &indexHits;
+    deque<u_int32_t> wordIds;
+    unordered_map<u_int32_t, float> weights; // key: image id, value: image score.
+};
 
 
 /**
@@ -115,37 +166,54 @@ u_int32_t ORBSearcher::searchImage(SearchRequest &request)
     cout << i_nbTotalIndexedImages << " images indexed in the index." << endl;
 
     unordered_map<u_int32_t, vector<Hit> > indexHits; // key: visual word id, values: index hits.
+    indexHits.rehash(imageReqHits.size());
     index->getImagesWithVisualWords(imageReqHits, indexHits);
 
     gettimeofday(&t[2], NULL);
     cout << "time: " << getTimeDiff(t[1], t[2]) << " ms." << endl;
     cout << "Ranking the images." << endl;
 
-    unordered_map<u_int32_t, float> weights; // key: image id, value: image score.
-
     index->readLock();
-    for (unordered_map<u_int32_t, vector<Hit> >::const_iterator it = indexHits.begin();
-        it != indexHits.end(); ++it)
+    #define NB_RANKING_THREAD 4
+
+    // Map the ranking to threads.
+    unsigned i_wordsPerThread = indexHits.size() / NB_RANKING_THREAD + 1;
+    RankingThread *threads[NB_RANKING_THREAD];
+
+    unordered_map<u_int32_t, vector<Hit> >::const_iterator it = indexHits.begin();
+    for (unsigned i = 0; i < NB_RANKING_THREAD; ++i)
     {
-        const vector<Hit> &hits = it->second;
+        threads[i] = new RankingThread(index, i_nbTotalIndexedImages, indexHits);
 
-        const float f_weight = log((float)i_nbTotalIndexedImages / hits.size());
-
-        for (vector<Hit>::const_iterator it2 = hits.begin();
-             it2 != hits.end(); ++it2)
-        {
-            /* TF-IDF according to the paper "Video Google:
-             * A Text Retrieval Approach to Object Matching in Videos" */
-            unsigned i_totalNbWords = index->countTotalNbWord(it2->i_imageId);
-            weights[it2->i_imageId] += f_weight / i_totalNbWords;
-        }
+        unsigned i_nbWords = 0;
+        for (; it != indexHits.end() && i_nbWords < i_wordsPerThread; ++it, ++i_nbWords)
+            threads[i]->addWord(it->first);
     }
+
+    // Compute
+    for (unsigned i = 0; i < NB_RANKING_THREAD; ++i)
+        threads[i]->start();
+    for (unsigned i = 0; i < NB_RANKING_THREAD; ++i)
+        threads[i]->join();
+
+    // Reduce...
+    unordered_map<u_int32_t, float> weights; // key: image id, value: image score.
+    weights.rehash(i_nbTotalIndexedImages);
+    for (unsigned i = 0; i < NB_RANKING_THREAD; ++i)
+        for (unordered_map<u_int32_t, float>::const_iterator it = threads[i]->weights.begin();
+            it != threads[i]->weights.end(); ++it)
+            weights[it->first] += it->second;
+
+    // Free the memory
+    for (unsigned i = 0; i < NB_RANKING_THREAD; ++i)
+        delete threads[i];
+
     index->unlock();
 
     priority_queue<SearchResult> rankedResults;
     for (tr1::unordered_map<unsigned, float>::const_iterator it = weights.begin();
          it != weights.end(); ++it)
-        rankedResults.push(SearchResult(it->second, it->first));
+        rankedResults.push(SearchResult(it->second, it->first, Rect()));
 
     gettimeofday(&t[3], NULL);
     cout << "time: " << getTimeDiff(t[2], t[3]) << " ms." << endl;
@@ -193,6 +261,7 @@ void ORBSearcher::returnResults(priority_queue<SearchResult> &rankedResults,
         i_res++;
         cout << "Id: " << res.i_imageId << ", score: " << res.f_weight << endl;
         req.results.push_back(res.i_imageId);
+        req.boundingRects.push_back(res.boundingRect);
         req.scores.push_back(res.f_weight);
         rankedResults.pop();
     }

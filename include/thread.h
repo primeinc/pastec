@@ -28,15 +28,14 @@
 
 class Thread
 {
-    friend class ThreadManager;
-
 public:
     Thread() : b_mustStop(false) {}
+    virtual ~Thread() {}
     void join()
     {
-        void *res;
         b_mustStop = true;
-        assert(pthread_join(thread, &res) == 0);
+        int i_ret = pthread_join(thread, NULL);
+        assert(i_ret == 0);
     }
 
     bool start()
