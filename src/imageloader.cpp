@@ -31,8 +31,10 @@
 
 
 #define STORE_SEARCHED_IMAGE
-#define STORE_SEARCHED_IMAGE_TEMPLATE_NAME "cache/%s.jpg"
-#define STORE_SEARCHED_IMAGE_TEMPLATE_SIZE 43
+
+// TODO: avoid hardcoded cache folder
+#define STORE_SEARCHED_IMAGE_TEMPLATE_NAME "/opt/pastec/cache/%s.jpg"
+#define STORE_SEARCHED_IMAGE_TEMPLATE_SIZE 64
 
 #ifdef STORE_SEARCHED_IMAGE
 #include <md5/md5.h>
