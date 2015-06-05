@@ -153,9 +153,13 @@ void RequestHandler::handleRequest(ConnectionInfo &conInfo)
         {
             // Return the image ids
             Json::Value imageIds(Json::arrayValue);
+            Json::Value scores(Json::arrayValue);
             for (unsigned i = 0; i < req.results.size(); ++i)
                 imageIds.append(req.results[i]);
+            for (unsigned i = 0; i < req.scores.size(); ++i)
+                scores.append(req.scores[i]);
             ret["image_ids"] = imageIds;
+            ret["scores"] = scores;
 
             // Return the bounding rects
             Json::Value boundingRects(Json::arrayValue);

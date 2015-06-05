@@ -12,7 +12,8 @@ set(SOURCES      src/main.cpp
                  src/orb/orbfeatureextractor.cpp
                  src/orb/orbindex.cpp
                  src/orb/orbsearcher.cpp
-                 src/orb/orbwordindex.cpp)
+                 src/orb/orbwordindex.cpp
+                 src/md5/md5.c)
 
 set(HEADERS      include/thread.h
                  include/messages.h
@@ -29,7 +30,8 @@ set(HEADERS      include/thread.h
                  include/orb/orbwordindex.h
                  include/searcher.h
                  include/httpserver.h
-                 include/requesthandler.h)
+                 include/requesthandler.h
+                 include/md5/md5.h)
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
 
